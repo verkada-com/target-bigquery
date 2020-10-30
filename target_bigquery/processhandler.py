@@ -292,3 +292,171 @@ class BookmarksStatePartialLoadJobProcessHandler(PartialLoadJobProcessHandler):
             self.EMITTED_STATE["bookmarks"][stream] = self.STATE["bookmarks"][stream]
 
             yield self.EMITTED_STATE
+
+
+class StreamingInsertsProcessHandler(BaseProcessHandler):
+
+    def __init__(self, logger, **kwargs):
+        super(StreamingInsertsProcessHandler, self).__init__(logger, **kwargs)
+
+        # self.truncate = kwargs.get("truncate", False)
+        # self.partially_loaded_streams = set()
+        self.add_metadata_columns = kwargs.get("add_metadata_columns", True)
+        self.validate_records = kwargs.get("validate_records", True)
+        self.table_configs = kwargs.get("table_configs", {}) or {}
+        #
+        self.INIT_STATE = kwargs.get("init_state") or {}
+        self.STATE = State(**self.INIT_STATE)
+        #
+        # self.rows = {}
+
+        self.client = bigquery.Client(
+            project=self.project_id,
+            location=kwargs.get("location", "US")
+        )
+
+        self.table_refs = {}
+
+    # def emit_initial_state(self):
+    #     return False
+
+    def handle_schema_message(self, msg):
+        stream = msg.stream
+        if stream not in self.schemas:
+            self.table_refs[stream] = self._ensure_table(client=self.client,
+                                                         dataset=self.dataset,
+                                                         table_name="{}{}{}".format(self.table_prefix, msg.stream, self.table_suffix),
+                                                         table_schema=msg.schema,
+                                                         table_config=self.table_configs.get(stream, {}),
+                                                         key_props=msg.key_properties,
+                                                         metadata_columns=self.add_metadata_columns)
+
+        for s in super(StreamingInsertsProcessHandler, self).handle_schema_message(msg):
+            yield s
+
+        yield from ()
+
+    def handle_record_message(self, msg):
+        assert isinstance(msg, singer.RecordMessage)
+
+        stream = msg.stream
+
+        if stream not in self.schemas:
+            raise Exception(f"A record for stream {msg.stream} was encountered before a corresponding schema")
+
+        schema = self.schemas[stream]
+
+        if self.validate_records:
+            validate(msg.record, schema)
+
+        if self.add_metadata_columns:
+            msg.record["_time_extracted"] = msg.time_extracted.isoformat() \
+                if msg.time_extracted else datetime.utcnow().isoformat()
+            msg.record["_time_loaded"] = datetime.utcnow().isoformat()
+
+        new_rec = filter_by_schema(schema, msg.record)
+        new_rec = json.loads(json.dumps(new_rec, cls=DecimalEncoder))
+
+        self._stream_to_bq(client=self.client, table_ref=self.table_refs[stream], row=[new_rec])
+
+        yield from ()
+
+    def handle_state_message(self, msg):
+        assert isinstance(msg, singer.StateMessage)
+
+        self.STATE.merge(msg.value)
+
+        yield self.STATE
+
+    def on_stream_end(self):
+        # self._stream_to_bq(self.rows)
+        yield self.STATE
+
+    def _ensure_table(self,
+                    client,
+                    dataset,
+                    table_name,
+                    table_schema,
+                    table_config,
+                    key_props,
+                    metadata_columns):
+        """
+        Ensure the table exists with partitioning/clustering
+        & returns a table reference to save for streaming
+        """
+        logger = self.logger
+        partition_field = table_config.get("partition_field", None)
+        cluster_fields = table_config.get("cluster_fields", None)
+        force_fields = table_config.get("force_fields", {})
+
+        schema = build_schema(table_schema, key_properties=key_props, add_metadata=metadata_columns, force_fields=force_fields)
+
+        try:
+            # dataset_ref = bigquery.DatasetReference(project, dataset)
+            table_ref = dataset.table(table_name)
+            table = bigquery.Table(table_ref, schema=schema)
+
+            if partition_field:
+                table.time_partitioning = bigquery.table.TimePartitioning(
+                    type_=bigquery.table.TimePartitioningType.DAY,
+                    field=partition_field
+                )
+
+            if cluster_fields:
+                table.clustering_fields = cluster_fields
+
+            table = client.create_table(table, exists_ok=True) # supposedly exists_ok ignores related errors
+            logger.info(f"table created: {dataset}.{table_name}")
+            return dataset.table(table.table_id)
+
+        except Exception as e:
+            logger.error(f"failed to ensure table exists: {dataset}.{table_name}")
+            raise e
+
+
+    def _stream_to_bq(self,
+                    client,
+                    table_ref,
+                    row):
+        logger = self.logger
+
+        errors = None
+        try:
+            errors = client.insert_rows_json(table_ref, row)
+            if errors != []:
+                errs = '\n'.join(errors)
+                logger.error(f"failed to insert rows for {table_ref.table_id}: {errs}\noffending record: {row}")
+                raise Exception(errors)
+        except Exception as err:
+            logger.error(
+                "failed to stream to table {}: {}".format(table_ref.table_id, str(err))
+            )
+            raise err
+
+# class BookmarksStreamingInsertsProcessHandler(StreamingInsertsProcessHandler):
+#
+#     def __init__(self, logger, **kwargs):
+#         super(BookmarksStreamingInsertsProcessHandler, self).__init__(logger, **kwargs)
+#
+#         self.EMITTED_STATE = State(**self.INIT_STATE)
+#
+#     def handle_state_message(self, msg):
+#         assert isinstance(msg, singer.StateMessage)
+#         for s in super(StreamingInsertsProcessHandler, self).handle_state_message(msg):
+#             yield s
+#
+#         self.EMITTED_STATE["bookmarks"][stream] = self.STATE["bookmarks"][stream]
+#
+#         yield self.EMITTED_STATE
+#
+#     def on_stream_end(self):
+#         rows = {s: self.rows[s] for s in self.rows.keys() if self.rows[s].tell() > 0}
+#         if len(rows) == 0:
+#             return iter([])
+#
+#         for stream in rows.keys():
+#             self._do_temp_table_based_load({stream: rows[stream]})
+#
+#             self.EMITTED_STATE["bookmarks"][stream] = self.STATE["bookmarks"][stream]
+#
+#             yield self.EMITTED_STATE

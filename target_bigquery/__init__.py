@@ -24,7 +24,7 @@ def main():
     parser.add_argument("-ph", "--processhandler",
                         help="Defines the loading process. Partial loads by default.",
                         required=False,
-                        choices=["load-job", "partial-load-job", "bookmarks-partial-load-job"],
+                        choices=["load-job", "partial-load-job", "bookmarks-partial-load-job", "streaming-inserts"],
                         default="partial-load-job"
                         )
     flags = parser.parse_args()
@@ -62,7 +62,7 @@ def main():
 
     try:
         from target_bigquery.processhandler import LoadJobProcessHandler, PartialLoadJobProcessHandler, \
-            BookmarksStatePartialLoadJobProcessHandler
+            BookmarksStatePartialLoadJobProcessHandler, StreamingInsertsProcessHandler
 
         ph = None
         if flags.processhandler == "load-job":
@@ -71,6 +71,8 @@ def main():
             ph = PartialLoadJobProcessHandler
         elif flags.processhandler == "bookmarks-partial-load-job":
             ph = BookmarksStatePartialLoadJobProcessHandler
+        elif flags.processhandler == "streaming-inserts":
+            ph = StreamingInsertsProcessHandler
         else:
             raise Exception("Unknown process handler.")
 
