@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name="target-bigquery",
-    version="0.10.1",
+    version="0.10.2",
     description="Singer.io target for writing data to Google BigQuery",
     author="Adswerve",
     url="https://github.com/adswerve/target-bigquery",

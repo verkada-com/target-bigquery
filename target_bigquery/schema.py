@@ -1,6 +1,6 @@
 import re
 
-# import logging
+import logging
 from google.cloud.bigquery import SchemaField
 
 JSON_SCHEMA_LITERALS = {"boolean", "number", "integer", "string"}
@@ -38,9 +38,10 @@ def get_type(property):
     return field_type, nullable
 
 
-def filter(schema, record):
+def __filter(schema, record):
     if not record:
         return record
+
     field_type, _ = get_type(schema)
 
     # return literals without checking
@@ -71,8 +72,7 @@ def filter(schema, record):
                 # logging.error(f"KEY ({key}) NOT IN OBJECT RECORD ({record})!!!!")
                 continue
 
-            obj_results[bigquery_transformed_key(key)] = filter(prop_schema,
-                                                                record[key])  # adswerve fix to match schema field name
+            obj_results[bigquery_transformed_key(key)] = filter(prop_schema, record[key])
         #     logging.error(f"object record key {key} appended")
         # logging.error(f"filtered object: {obj_results}")
         return obj_results
@@ -98,88 +98,147 @@ def filter(schema, record):
         raise ValueError(f"type {field_type} is unknown")
 
 
+def cleanup_record(schema, record):
+    nr = {}
+
+    if not isinstance(record, dict) and not isinstance(record, list):
+        return record
+
+    for key, value in record.items():
+        nkey = bigquery_transformed_key(key)
+
+        if isinstance(value, dict):
+            nr[nkey] = cleanup_record(schema, value)
+
+        elif isinstance(value, list):
+            nr[nkey] = []
+            for o in value:
+                nr[nkey].append(cleanup_record(schema, o))
+
+        else:
+            nr[nkey] = value
+
+    return nr
+
+
+def merge_anyof(props):
+    fs = set()
+    sfs = []
+
+    for prop in props:
+        if prop["type"] == "null": continue
+        for sf in build_schema(prop, add_metadata=False):
+            if sf.name in fs:
+                continue
+
+            sfs.append(sf)
+            fs.add(sf.name)
+
+    return sfs
+
+
 def define_schema(field, name, required_fields=None):
+    if "KeyValueOfstringbase" in field.get('properties', {}) or "KeyValueOfstringbase" in field or "KeyValuePairOfstringbase" in field.get('properties', {}) or "KeyValuePairOfstringbase" in field:
+        return None
+
     field_type, _ = get_type(field)
-    nullable = True
-    if required_fields and name in required_fields:
-        nullable = False
+
+    schema_description = None
+    schema_name = name
+    schema_mode = "REQUIRED" if required_fields and name in required_fields else "NULLABLE"
 
     if field_type == "anyOf":
         props = field["anyOf"]
+
+        schema_type = "RECORD"
+        schema_fields = merge_anyof(props)
+
+        field_types = set()
         # select first non-null property
         for prop in props:
             prop_type, _ = get_type(prop)
             if not prop_type:
                 continue
 
-            # take the first property that is not None
-            # of the possible types
             if field_type == "anyOf" and prop_type:
-                field_type = prop_type
-                field = prop
+                field_types.add(prop_type)
 
-    schema_description = None
-    schema_name = name
-    schema_mode = "NULLABLE" if nullable else "required"
+        schema_mode = None
+        if "array" in field_types:
+            schema_mode = "REPEATED"
+        elif "object" in field_types:
+            schema_mode = "NULLABLE"
+        elif any([lit in field_types for lit in JSON_SCHEMA_LITERALS]):
+            schema_mode = "NULLABLE"
 
-    if field_type == "object":
+        return SchemaField(
+            bigquery_transformed_key(schema_name), schema_type, schema_mode, schema_description, schema_fields
+        )
+
+    elif field_type == "object":
         schema_type = "RECORD"
         schema_fields = tuple(build_schema(field, add_metadata=False))
 
-        # logging.info(f"schema name: {bigquery_transformed_key(schema_name)}, type: {schema_type}, mode: {schema_mode},  fields: {schema_fields}")
         return SchemaField(
-            bigquery_transformed_key(schema_name), schema_type, schema_mode, schema_description, schema_fields,
-            # adswerve fix
+            bigquery_transformed_key(schema_name), schema_type, schema_mode, schema_description, schema_fields
         )
+
     elif field_type == "array":
         # objects in arrays cannot be nullable
         # - but nested fields in RECORDS can be nullable
         props = field.get("items")
+        if "KeyValueOfstringbase" in props or "KeyValuePairOfstringbase" in props:
+            return None
+
         props_type, _ = get_type(props)
 
         if props_type == "object":
             schema_type = "RECORD"
             schema_fields = tuple(build_schema(props, add_metadata=False))
+
+        elif props_type == "anyOf":
+            schema_type = "RECORD"
+            schema_fields = merge_anyof(props.get("anyOf"))
+
         else:
-            schema_type = props_type if props_type.lower() != 'array' else get_type(props.get('items'))[0]  # adswerve fix
+            schema_type = props_type if props_type.lower() != 'array' else get_type(props.get('items'))[0]
             schema_fields = ()
 
         schema_mode = "REPEATED"
 
-        # logging.info(f"schema name: {bigquery_transformed_key(schema_name)}, type: {schema_type}, mode: {schema_mode},  fields: {schema_fields}")
         return SchemaField(
-            bigquery_transformed_key(schema_name), schema_type, schema_mode, schema_description, schema_fields,
-            # adswerve fix
+            bigquery_transformed_key(schema_name), schema_type, schema_mode, schema_description, schema_fields
         )
 
     if field_type not in JSON_SCHEMA_LITERALS:
         raise ValueError(f"unknown type: {field_type}")
 
     if field_type == "string" and "format" in field:
-        format = field["format"]
-        if format == "date-time":
+        f = field["format"]
+        if f == "date-time":
             schema_type = "timestamp"
-        elif format == "date":
+        elif f == "date":
             schema_type = "date"
-        elif format == "time":
+        elif f == "time":
             schema_type = "time"
         else:
             schema_type = field_type
+
     elif field_type == "number":
         schema_type = "FLOAT"
     else:
         schema_type = field_type
 
-        # always make a field nullable
-    # logging.info(f"schema name: {bigquery_transformed_key(schema_name)}, type: {schema_type}, mode: {schema_mode}")
-    return SchemaField(bigquery_transformed_key(schema_name), schema_type, schema_mode, schema_description,
-                       ())  # adswerve fix
+    return SchemaField(bigquery_transformed_key(schema_name), schema_type, schema_mode, schema_description, ())
 
 
 def bigquery_transformed_key(key):
     for pattern, repl in [(r"-", "_"), (r"\.", "_")]:
         key = re.sub(pattern, repl, key)
-    if re.match(r"^\d", key): key = "_" + key  # adswerve fix
+
+    if re.match(r"^\d", key):
+        key = "_" + key
+
     return key
 
 
@@ -190,22 +249,26 @@ def build_schema(schema, key_properties=None, add_metadata=True, force_fields={}
     if "required" in schema:
         required_fields.update(schema["required"])
 
-    for key, props in schema["properties"].items():
+    for key, props in schema.get("properties",
+                                 schema.get("items", {}).get("properties")
+                                 ).items():  # schema["properties"].items():
 
         if key in force_fields:
             SCHEMA.append(
-                SchemaField(key, force_fields[key]["type"], force_fields[key].get("mode", "nullable"), force_fields[key].get("description", None), ())
+                SchemaField(key, force_fields[key]["type"], force_fields[key].get("mode", "nullable"),
+                            force_fields[key].get("description", None), ())
             )
+
         elif not props:
             # if we end up with an empty record.
             continue
 
         else:
-            SCHEMA.append(
-            define_schema(
+            s = define_schema(
                 props, bigquery_transformed_key(key), required_fields=required_fields
             )
-        )
+            if s:
+                SCHEMA.append(s)
 
     if add_metadata:
         for field in METADATA_FIELDS:

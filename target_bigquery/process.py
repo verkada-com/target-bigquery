@@ -1,15 +1,7 @@
-import copy
 import json
-import re
-import pytz
-from datetime import datetime
-from tempfile import TemporaryFile
 
 import singer
-from jsonschema import validate
 
-from target_bigquery.encoders import DecimalEncoder
-from target_bigquery.schema import build_schema, filter
 from target_bigquery.processhandler import BaseProcessHandler
 
 logger = singer.get_logger()

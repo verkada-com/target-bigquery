@@ -14,7 +14,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(4, len(state))  # initial emit + 3 states
+        self.assertEqual(5, len(state))  # initial emit + 3 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"simple_stream": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -36,7 +36,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(4, len(state))  # initial emit + 3 states
+        self.assertEqual(5, len(state))  # initial emit + 3 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"simple_stream": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -58,7 +58,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(4, len(state))  # initial emit + 3 states
+        self.assertEqual(5, len(state))  # initial emit + 3 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"simple_stream": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -79,7 +79,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(7, len(state))  # initial emit + 6 states
+        self.assertEqual(8, len(state))  # initial emit + 6 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"stream_one": {"timestamp": "2020-01-11T00:00:00.000000Z"}, "stream_two": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -101,7 +101,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(3, len(state))  # initial emit + 6 states
+        self.assertEqual(4, len(state))  # initial emit + 6 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"stream_one": {"timestamp": "2020-01-11T00:00:00.000000Z"}, "stream_two": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -123,7 +123,7 @@ class TestPartialLoadsPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(3, len(state))  # initial emit + 6 states
+        self.assertEqual(4, len(state))  # initial emit + 6 states +last emit
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"stream_one": {"timestamp": "2020-01-11T00:00:00.000000Z"}, "stream_two": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -197,7 +197,7 @@ class TestPartialLoadsBookmarksPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(4, len(state))  # initial emit + 3 states
+        self.assertEqual(5, len(state))  # initial emit + 3 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"simple_stream": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -219,7 +219,7 @@ class TestPartialLoadsBookmarksPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(4, len(state))  # initial emit + 3 states
+        self.assertEqual(5, len(state))  # initial emit + 3 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"simple_stream": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -240,7 +240,7 @@ class TestPartialLoadsBookmarksPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(7, len(state))  # initial emit + 6 states
+        self.assertEqual(8, len(state))  # initial emit + 6 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"stream_one": {"timestamp": "2020-01-11T00:00:00.000000Z"}, "stream_two": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})
@@ -262,7 +262,7 @@ class TestPartialLoadsBookmarksPartialLoadJob(unittestcore.BaseUnitTest):
 
         ret = main()
         state = self.get_state()
-        self.assertEqual(3, len(state))  # initial emit + 6 states
+        self.assertEqual(4, len(state))  # initial emit + 6 states
 
         self.assertEqual(ret, 0, msg="Exit code is not 0!")
         self.assertDictEqual(state[-1], {"bookmarks": {"stream_one": {"timestamp": "2020-01-11T00:00:00.000000Z"}, "stream_two": {"timestamp": "2020-01-11T00:00:00.000000Z"}}})

@@ -10,7 +10,6 @@ import singer
 
 from target_bigquery.encoders import DecimalEncoder
 from target_bigquery.process import process
-from target_bigquery.schema import build_schema, filter
 from target_bigquery.utils import emit_state, ensure_dataset
 
 logger = singer.get_logger()

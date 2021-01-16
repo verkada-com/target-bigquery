@@ -12,7 +12,7 @@ from google.cloud.bigquery.job import SourceFormat
 from jsonschema import validate
 
 from target_bigquery.encoders import DecimalEncoder
-from target_bigquery.schema import build_schema, filter as filter_by_schema
+from target_bigquery.schema import build_schema, cleanup_record
 from target_bigquery.state import State
 
 
@@ -70,7 +70,7 @@ class LoadJobProcessHandler(BaseProcessHandler):
         self.validate_records = kwargs.get("validate_records", True)
         self.table_configs = kwargs.get("table_configs", {}) or {}
 
-        self.INIT_STATE = kwargs.get("init_state") or {}
+        self.INIT_STATE = kwargs.get("initial_state") or {}
         self.STATE = State(**self.INIT_STATE)
 
         self.rows = {}
@@ -107,9 +107,9 @@ class LoadJobProcessHandler(BaseProcessHandler):
                 if msg.time_extracted else datetime.utcnow().isoformat()
             msg.record["_time_loaded"] = datetime.utcnow().isoformat()
 
-        new_rec = filter_by_schema(schema, msg.record)
+        nr = cleanup_record(schema, msg.record)
 
-        data = bytes(json.dumps(new_rec, cls=DecimalEncoder) + "\n", "UTF-8")
+        data = bytes(json.dumps(nr, cls=DecimalEncoder) + "\n", "UTF-8")
         self.rows[stream].write(data)
 
         yield from ()
@@ -188,6 +188,7 @@ class LoadJobProcessHandler(BaseProcessHandler):
 
         schema = build_schema(table_schema, key_properties=key_props, add_metadata=metadata_columns, force_fields=force_fields)
         load_config = LoadJobConfig()
+        load_config.ignore_unknown_values = True
         load_config.schema = schema
         if partition_field:
             load_config.time_partitioning = bigquery.table.TimePartitioning(
@@ -254,7 +255,8 @@ class PartialLoadJobProcessHandler(LoadJobProcessHandler):
     def on_stream_end(self):
         rows = {s: self.rows[s] for s in self.rows.keys() if self.rows[s].tell() > 0}
         if len(rows) == 0:
-            return iter([])
+            yield self.STATE
+            return
 
         self._do_temp_table_based_load(rows)
         yield self.STATE
@@ -284,7 +286,8 @@ class BookmarksStatePartialLoadJobProcessHandler(PartialLoadJobProcessHandler):
     def on_stream_end(self):
         rows = {s: self.rows[s] for s in self.rows.keys() if self.rows[s].tell() > 0}
         if len(rows) == 0:
-            return iter([])
+            yield self.STATE
+            return
 
         for stream in rows.keys():
             self._do_temp_table_based_load({stream: rows[stream]})
