@@ -207,7 +207,7 @@ def determine_field_mode(field_name, field_property):
 def replace_nullable_mode_with_required(schema_field_input):
     schema_field_updated = SchemaField(name=schema_field_input.name,
                                        field_type=schema_field_input.field_type,
-                                       mode='REQUIRED',
+                                       mode='NULLABLE',
                                        description=schema_field_input.description,
                                        fields=schema_field_input.fields,
                                        policy_tags=schema_field_input.policy_tags)
