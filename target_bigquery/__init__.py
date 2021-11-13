@@ -49,6 +49,11 @@ def main():
 
     # target tables config (e.g, partitioning and clustering)
     table_config = flags.tables or config.get("table_config")
+
+    logger.info(f"table config is {table_config}")
+
+    raise
+
     tables = {}
     if table_config:
         with open(table_config) as f:
