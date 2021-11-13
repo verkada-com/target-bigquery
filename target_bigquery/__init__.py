@@ -57,8 +57,6 @@ def main():
 
     logger.info(f"tables is {tables}")
 
-    raise
-
     # state
     state = None
     if flags.state is not None:
